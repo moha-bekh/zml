@@ -18,6 +18,7 @@ Ready to write some code? Try starting with [your first model in ZML](./tutorial
 - [HuggingFace Authentication](./howtos/huggingface_access_token.md)
 - [Port Pytorch models to ZML](./howtos/howto_torch2zml.md)
 - [Cross Compile and Deploy Models on a Server](./howtos/deploy_on_server.md)
+- [Troubleshoot a Linux CPU Deployment](./howtos/cpu_runtime_compatibility.md)
 - [Dockerize Models](./howtos/dockerize_models.md)
 - [Profile ZML Programs](./howtos/profiling.md)
 

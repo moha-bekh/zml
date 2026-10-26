@@ -1,6 +1,9 @@
 
 # Deploying Models on a Server
 
+For CPU runtime loading errors on Linux, see
+[Troubleshooting a Linux CPU deployment](cpu_runtime_compatibility.md).
+
 To run models on remote GPU/TPU machines, it is inconvenient to have to check
 out your project’s repository and compile it on every target. Instead, you more
 likely want to cross-compile right from your development machine, **for every**
