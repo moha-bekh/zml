@@ -19,11 +19,14 @@ pub const CompilationParameters = struct {
 
     pub fn init(mdl: model.Model, config: model.Config, seqlen: u32, meshes: common.Meshes) CompilationParameters {
         const dtype = mdl.text_model.embed_tokens.weight.dtype();
+        var kv_cache: model.KvCache = .init(config, 1, seqlen, dtype, .f32, meshes.model);
+        // Layer executables only need their own recurrent and convolution state.
+        kv_cache.gated_delta_net = kv_cache.gated_delta_net.singleLayer();
         return .{
             .prefill_tokens = .init(.{ .b = 1, .s = seqlen }, .u32),
             .decode_tokens = .init(.{ .b = 1, .s = 1 }, .u32),
             .token_index = .init(.{}, .u32),
-            .kv_cache = .init(config, 1, seqlen, dtype, .f32, meshes.model),
+            .kv_cache = kv_cache,
             .rng = .init(),
             .seqlen = seqlen,
             .meshes = meshes,
@@ -39,8 +42,9 @@ pub const Args = struct {
     next_token_buf: *zml.Buffer,
     token_index_buf: *zml.Buffer,
     active_length_buf: *zml.Buffer,
-    kv_cache_buffers: *zml.Bufferized(model.KvCache),
+    self_attn_cache_buffers: *zml.Bufferized(model.KvCache.SelfAttnCache),
     rng_buffers: *zml.Bufferized(zml.Tensor.Rng),
+    linear_cache_buffers: []zml.Bufferized(model.KvCache.GatedDeltaNetCache),
 };
 
 pub const CompiledModel = struct {
@@ -162,12 +166,13 @@ pub fn run(runner: *KernelRunner, args: Args, layer_index_buffers: []const zml.B
     }, .{});
     defer hidden_buffer.deinit();
 
+    var linear_cache_index: usize = 0;
     for (runner.layers, layer_index_buffers) |*layer_runner, layer_index_buffer| {
         switch (layer_runner.*) {
             .full_attention => |*layer| {
                 var layer_cache: zml.Bufferized(model.KvCache.SelfAttnCache) = .{
-                    .k = args.kv_cache_buffers.self_attn.k,
-                    .v = args.kv_cache_buffers.self_attn.v,
+                    .k = args.self_attn_cache_buffers.k,
+                    .v = args.self_attn_cache_buffers.v,
                     .layer_index = layer_index_buffer,
                 };
                 layer.run(args.io, .{
@@ -178,14 +183,16 @@ pub fn run(runner: *KernelRunner, args: Args, layer_index_buffers: []const zml.B
                     },
                     .outputs = .{ .hidden = &hidden_buffer, .cache = &layer_cache },
                 }, .{});
-                args.kv_cache_buffers.self_attn.k = layer_cache.k;
-                args.kv_cache_buffers.self_attn.v = layer_cache.v;
+                args.self_attn_cache_buffers.k = layer_cache.k;
+                args.self_attn_cache_buffers.v = layer_cache.v;
                 layer_cache.layer_index.deinit();
             },
             .linear_attention => |*layer| {
+                const cache_buffers = &args.linear_cache_buffers[linear_cache_index];
+                linear_cache_index += 1;
                 var layer_cache: zml.Bufferized(model.KvCache.GatedDeltaNetCache) = .{
-                    .conv_state = args.kv_cache_buffers.gated_delta_net.conv_state,
-                    .recurrent_state = args.kv_cache_buffers.gated_delta_net.recurrent_state,
+                    .conv_state = cache_buffers.conv_state,
+                    .recurrent_state = cache_buffers.recurrent_state,
                     .layer_index = layer_index_buffer,
                 };
                 layer.run(args.io, .{
@@ -196,8 +203,8 @@ pub fn run(runner: *KernelRunner, args: Args, layer_index_buffers: []const zml.B
                     },
                     .outputs = .{ .hidden = &hidden_buffer, .cache = &layer_cache },
                 }, .{});
-                args.kv_cache_buffers.gated_delta_net.conv_state = layer_cache.conv_state;
-                args.kv_cache_buffers.gated_delta_net.recurrent_state = layer_cache.recurrent_state;
+                cache_buffers.conv_state = layer_cache.conv_state;
+                cache_buffers.recurrent_state = layer_cache.recurrent_state;
                 layer_cache.layer_index.deinit();
             },
         }

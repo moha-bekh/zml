@@ -13,7 +13,8 @@ pub const Session = struct {
     prefill: inference.KernelRunner,
     decode: inference.KernelRunner,
     layer_index_buffers: []zml.Buffer,
-    kv_cache_buffers: zml.Bufferized(model.KvCache),
+    self_attn_cache_buffers: zml.Bufferized(model.KvCache.SelfAttnCache),
+    linear_cache_buffers: []zml.Bufferized(model.KvCache.GatedDeltaNetCache),
     rng_buffers: zml.Bufferized(zml.Tensor.Rng),
     tokenizer: zml.tokenizer.Tokenizer,
     generated_token_slice: zml.Slice,
@@ -31,20 +32,31 @@ pub const Session = struct {
         compiled_model: *inference.CompiledModel,
         model_buffers: *model.Buffers,
     ) !Session {
-        var kv_cache_buffers = try compiled_model.params.kv_cache.initBuffer(io, platform);
-        errdefer model.KvCache.deinitBuffer(&kv_cache_buffers);
+        var self_attn_cache_buffers = try compiled_model.params.kv_cache.self_attn.initBuffer(io, platform);
+        errdefer model.KvCache.SelfAttnCache.deinitBuffer(&self_attn_cache_buffers);
 
         const seed: u128 = @intCast(std.Io.Clock.now(.real, io).toNanoseconds());
         var rng_buffers = try zml.Tensor.Rng.init().initBuffer(io, platform, seed);
         errdefer zml.Tensor.Rng.deinitBuffer(&rng_buffers);
 
         const layer_types = compiled_model.loaded_model.inner.config.text_config.layer_types;
+        var linear_cache_count: usize = 0;
+        for (layer_types) |layer_type| {
+            if (layer_type == .linear_attention) linear_cache_count += 1;
+        }
+        const linear_cache_buffers = try allocator.alloc(zml.Bufferized(model.KvCache.GatedDeltaNetCache), linear_cache_count);
+        errdefer allocator.free(linear_cache_buffers);
+        var initialized_linear_caches: usize = 0;
+        errdefer for (linear_cache_buffers[0..initialized_linear_caches]) |*cache| model.KvCache.GatedDeltaNetCache.deinitBuffer(cache);
+        for (linear_cache_buffers) |*cache| {
+            cache.* = try compiled_model.params.kv_cache.gated_delta_net.initBuffer(io, platform);
+            initialized_linear_caches += 1;
+        }
         const layer_index_buffers = try allocator.alloc(zml.Buffer, layer_types.len);
         errdefer allocator.free(layer_index_buffers);
         var initialized_layer_index_buffers: usize = 0;
         errdefer for (layer_index_buffers[0..initialized_layer_index_buffers]) |*buffer| buffer.deinit();
         var full_attention_index: u32 = 0;
-        var linear_attention_index: u32 = 0;
         for (layer_index_buffers, layer_types) |*buffer, layer_type| {
             buffer.* = try switch (layer_type) {
                 .full_attention => b: {
@@ -52,8 +64,7 @@ pub const Session = struct {
                     break :b zml.Buffer.scalar(io, platform, full_attention_index, .u32);
                 },
                 .linear_attention => b: {
-                    defer linear_attention_index += 1;
-                    break :b zml.Buffer.scalar(io, platform, linear_attention_index, .u32);
+                    break :b zml.Buffer.scalar(io, platform, @as(u32, 0), .u32);
                 },
             };
             initialized_layer_index_buffers += 1;
@@ -74,7 +85,8 @@ pub const Session = struct {
             .prefill = prefill,
             .decode = decode,
             .layer_index_buffers = layer_index_buffers,
-            .kv_cache_buffers = kv_cache_buffers,
+            .self_attn_cache_buffers = self_attn_cache_buffers,
+            .linear_cache_buffers = linear_cache_buffers,
             .rng_buffers = rng_buffers,
             .tokenizer = tokenizer,
             .generated_token_slice = generated_token_slice,
@@ -91,7 +103,9 @@ pub const Session = struct {
         self.decode.deinit(self.allocator);
         for (self.layer_index_buffers) |*buffer| buffer.deinit();
         self.allocator.free(self.layer_index_buffers);
-        model.KvCache.deinitBuffer(&self.kv_cache_buffers);
+        model.KvCache.SelfAttnCache.deinitBuffer(&self.self_attn_cache_buffers);
+        for (self.linear_cache_buffers) |*cache| model.KvCache.GatedDeltaNetCache.deinitBuffer(cache);
+        self.allocator.free(self.linear_cache_buffers);
         zml.Tensor.Rng.deinitBuffer(&self.rng_buffers);
         self.generated_token_slice.free(self.allocator);
     }
@@ -126,7 +140,8 @@ pub const Session = struct {
             .next_token_buf = &next_token_buffer,
             .token_index_buf = &prefill_token_index_buffer,
             .active_length_buf = &active_length_buffer,
-            .kv_cache_buffers = &self.kv_cache_buffers,
+            .self_attn_cache_buffers = &self.self_attn_cache_buffers,
+            .linear_cache_buffers = self.linear_cache_buffers,
             .rng_buffers = &self.rng_buffers,
         }, self.layer_index_buffers);
 
@@ -172,7 +187,8 @@ pub const Session = struct {
                 .next_token_buf = &current_token_buffer,
                 .token_index_buf = &token_index_buffer,
                 .active_length_buf = &active_length_buffer,
-                .kv_cache_buffers = &self.kv_cache_buffers,
+                .self_attn_cache_buffers = &self.self_attn_cache_buffers,
+                .linear_cache_buffers = self.linear_cache_buffers,
                 .rng_buffers = &self.rng_buffers,
             }, self.layer_index_buffers);
 
