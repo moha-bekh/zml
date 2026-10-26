@@ -54,7 +54,7 @@ pub const GpuInfo = struct {
     mem_total_bytes: ?u64 = null,
     mem_bus_width: ?u64 = null,
 
-    // PCIe
+    // PCIe throughput is in KB/s (decimal kilobytes), as reported by NVML.
     pcie_tx_kbps: ?u64 = null,
     pcie_rx_kbps: ?u64 = null,
     pcie_bandwidth_mbps: ?u64 = null,
