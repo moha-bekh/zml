@@ -1,0 +1,52 @@
+{
+  "baseline": {
+    "turns": 2,
+    "source": "cpu.profile",
+    "mode": "sample@199hz",
+    "total_sample_weight": 12617.0,
+    "copy_thunk_sample_weight": 2251.0,
+    "copy_thunk_inclusive_percent": 17.84100816358881,
+    "losses": {
+      "dropped": 0,
+      "failed_reads": 0,
+      "late_ticks": 166,
+      "undecoded": 0,
+      "throttled": 0,
+      "reasons": {
+        "a round of reads outran the 10.0ms tick: worst 136.9ms, 55.5ms on average; 845 more readings fell due meanwhile and never ran": 166
+      },
+      "overrun": {
+        "tick_ns": 10000000,
+        "worst_ns": 136897002,
+        "total_ns": 9214636275,
+        "skipped": 845
+      }
+    },
+    "scope": "Whole process including compile/load. Diagnostic; timings are excluded from performance comparison."
+  },
+  "candidate": {
+    "turns": 2,
+    "source": "cpu.profile",
+    "mode": "sample@199hz",
+    "total_sample_weight": 9360.0,
+    "copy_thunk_sample_weight": 54.0,
+    "copy_thunk_inclusive_percent": 0.5769230769230769,
+    "losses": {
+      "dropped": 0,
+      "failed_reads": 0,
+      "late_ticks": 148,
+      "undecoded": 0,
+      "throttled": 0,
+      "reasons": {
+        "a round of reads outran the 10.0ms tick: worst 106.6ms, 52.9ms on average; 712 more readings fell due meanwhile and never ran": 148
+      },
+      "overrun": {
+        "tick_ns": 10000000,
+        "worst_ns": 106596431,
+        "total_ns": 7822770952,
+        "skipped": 712
+      }
+    },
+    "scope": "Whole process including compile/load. Diagnostic; timings are excluded from performance comparison."
+  }
+}

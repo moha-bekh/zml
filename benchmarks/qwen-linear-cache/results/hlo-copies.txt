@@ -1,0 +1,6 @@
+baseline full HLO SHA256: ca8fb1c3489908b13828943d94a405497888221d4574874204dc697b7bbab478
+  %copy.23 = f32[1,18,16,128,128]{4,3,2,1,0} copy(%Arg_17.1)
+  %copy.20 = f32[1,18,16,128,128]{4,3,2,1,0} copy(%copy.23)
+
+candidate full HLO SHA256: 554b32b14906a1297c6f738c8bf6d9e286b7f675cf85fff7e69bb9e30b0958b9
+  %copy.21 = f32[1,1,16,128,128]{4,3,2,1,0} copy(%Arg_17.1)

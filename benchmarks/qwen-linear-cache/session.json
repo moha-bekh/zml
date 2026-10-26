@@ -1,0 +1,70 @@
+{
+  "name": "Qwen CPU repeated generation profile",
+  "format": "json",
+  "requests": [
+    {
+      "label": "cpu-profile",
+      "source": "cpu.profile",
+      "target": {
+        "launch": [
+          "./llm",
+          "--model=./model",
+          "--prompt=Reply with one word: hello.",
+          "--seqlen=64",
+          "--topk=1",
+          "--backend=stablehlo",
+          "--perf-repeats=4"
+        ]
+      },
+      "mode": "sample@199hz",
+      "emit": [
+        "stack",
+        "topk"
+      ],
+      "stack": "auto",
+      "keys": [
+        "task"
+      ]
+    },
+    {
+      "label": "cpu-total",
+      "source": "cpu.oncpu_time",
+      "target": {
+        "launch": [
+          "./llm",
+          "--model=./model",
+          "--prompt=Reply with one word: hello.",
+          "--seqlen=64",
+          "--topk=1",
+          "--backend=stablehlo",
+          "--perf-repeats=4"
+        ]
+      },
+      "mode": "poll@50ms",
+      "emit": [
+        "summary",
+        "timeline"
+      ]
+    },
+    {
+      "label": "rss",
+      "source": "mem.rss",
+      "target": {
+        "launch": [
+          "./llm",
+          "--model=./model",
+          "--prompt=Reply with one word: hello.",
+          "--seqlen=64",
+          "--topk=1",
+          "--backend=stablehlo",
+          "--perf-repeats=4"
+        ]
+      },
+      "mode": "poll@50ms",
+      "emit": [
+        "summary",
+        "timeline"
+      ]
+    }
+  ]
+}
