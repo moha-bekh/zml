@@ -18,8 +18,8 @@ const device_metrics = .{
     .{ .field = "clock_graphics_mhz", .metric = "zml_device_clock_graphics_mhz", .help = "Graphics clock frequency in MHz" },
     .{ .field = "clock_sm_mhz", .metric = "zml_device_clock_sm_mhz", .help = "SM clock frequency in MHz" },
     .{ .field = "clock_mem_mhz", .metric = "zml_device_clock_memory_mhz", .help = "Memory clock frequency in MHz" },
-    .{ .field = "pcie_tx_kbps", .metric = "zml_device_pcie_tx_bytes_per_second", .help = "PCIe TX throughput in bytes per second", .fmt = fmtScaled(128) },
-    .{ .field = "pcie_rx_kbps", .metric = "zml_device_pcie_rx_bytes_per_second", .help = "PCIe RX throughput in bytes per second", .fmt = fmtScaled(128) },
+    .{ .field = "pcie_tx_kbps", .metric = "zml_device_pcie_tx_bytes_per_second", .help = "PCIe TX throughput in bytes per second", .fmt = fmtScaled(1000) },
+    .{ .field = "pcie_rx_kbps", .metric = "zml_device_pcie_rx_bytes_per_second", .help = "PCIe RX throughput in bytes per second", .fmt = fmtScaled(1000) },
     // Neuron
     .{ .field = "nc_tensors", .metric = "zml_device_neuron_tensors_bytes", .help = "Neuron core tensor memory in bytes" },
     .{ .field = "nc_constants", .metric = "zml_device_neuron_constants_bytes", .help = "Neuron core constants memory in bytes" },
@@ -156,4 +156,34 @@ fn fmtScaled(comptime scale: u64) fn (*std.Io.Writer, u64) std.Io.Writer.Error!v
             try writer.print("{d}", .{val * scale});
         }
     }.f;
+}
+
+test "PCIe kilobytes per second are exported as bytes per second" {
+    const cases = .{
+        .{ 0, 1, 0, 1000 },
+        .{ 1024, 2048, 1024000, 2048000 },
+        .{ 4294967295, 4294967295, 4294967295000, 4294967295000 },
+    };
+    inline for (cases) |case| {
+        var dev: DeviceInfo = .{ .cuda = .{ .values = .{ .{ .pcie_tx_kbps = case[0], .pcie_rx_kbps = case[1] }, .{} } } };
+        var host: HostInfo = .{ .values = .{ .{}, .{} } };
+        var writer = std.Io.Writer.Allocating.init(std.testing.allocator);
+        defer writer.deinit();
+        try write(&writer.writer, &.{&dev}, &host);
+        inline for (.{ .{ "tx", case[2] }, .{ "rx", case[3] } }) |metric| {
+            const expected = std.fmt.comptimePrint("zml_device_pcie_{s}_bytes_per_second{{device=\"0\",type=\"cuda\",name=\"\"}} {d}\n", .{ metric[0], metric[1] });
+            try std.testing.expect(std.mem.indexOf(u8, writer.written(), expected) != null);
+        }
+    }
+}
+
+test "unavailable PCIe throughput is omitted while zero is preserved" {
+    var dev: DeviceInfo = .{ .cuda = .{ .values = .{ .{ .pcie_rx_kbps = 0, .power_mw = 1234 }, .{} } } };
+    var host: HostInfo = .{ .values = .{ .{}, .{} } };
+    var writer = std.Io.Writer.Allocating.init(std.testing.allocator);
+    defer writer.deinit();
+    try write(&writer.writer, &.{&dev}, &host);
+    try std.testing.expect(std.mem.indexOf(u8, writer.written(), "zml_device_pcie_tx_bytes_per_second") == null);
+    try std.testing.expect(std.mem.indexOf(u8, writer.written(), "zml_device_pcie_rx_bytes_per_second{device=\"0\",type=\"cuda\",name=\"\"} 0\n") != null);
+    try std.testing.expect(std.mem.indexOf(u8, writer.written(), "zml_device_power_watts{device=\"0\",type=\"cuda\",name=\"\"} 1.234\n") != null);
 }
