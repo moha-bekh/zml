@@ -1,4 +1,4 @@
-load("@rules_zig//zig:defs.bzl", "zig_library")
+load("@rules_zig//zig:defs.bzl", "zig_library", "zig_test")
 
 zig_library(
     name = "csv",
@@ -8,4 +8,9 @@ zig_library(
     deps = [
         "//bin/zml-smi/info",
     ],
+)
+
+zig_test(
+    name = "test",
+    deps = [":csv"],
 )
