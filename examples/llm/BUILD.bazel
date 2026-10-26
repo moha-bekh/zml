@@ -1,5 +1,6 @@
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@bazel_skylib//rules:native_binary.bzl", "native_test")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load", "oci_push")
 load("@rules_zig//zig:defs.bzl", "zig_binary")
 load("@tar.bzl//tar:mtree.bzl", "mtree_spec")
@@ -10,7 +11,10 @@ zig_binary(
     srcs = glob(["**/*.zig"]),
     main = "main.zig",
     visibility = ["//visibility:public"],
-    deps = ["//zml", "@linenoise"],
+    deps = [
+        "//zml",
+        "@linenoise",
+    ],
 )
 
 zig_binary(
@@ -29,6 +33,39 @@ zig_binary(
     deps = ["//zml"],
 )
 
+zig_binary(
+    name = "qwen3_5_cache_tests",
+    testonly = True,
+    srcs = glob(["**/*.zig"]),
+    main = "models/qwen3_5_cache_tests.zig",
+    deps = ["//zml"],
+)
+
+native_test(
+    name = "qwen3_5_cache_test",
+    size = "medium",
+    src = ":qwen3_5_cache_tests",
+    target_compatible_with = select({
+        "//platforms:cpu.enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
+native_test(
+    name = "qwen3_5_cache_cuda_test",
+    size = "medium",
+    src = ":qwen3_5_cache_tests",
+    args = ["--cuda"],
+    tags = [
+        "manual",
+        "requires-gpu",
+    ],
+    target_compatible_with = select({
+        "//platforms:cuda.enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
+)
+
 build_test(
     name = "test",
     targets = [":llm"],
@@ -37,7 +74,7 @@ build_test(
 mtree_spec(
     name = "mtree",
     srcs = [":llm"],
-    tags = ["manual"]
+    tags = ["manual"],
 )
 
 tar(
@@ -52,19 +89,19 @@ tar(
     ],
     compress = "zstd",
     mtree = ":mtree",
-    tags = ["manual"]
+    tags = ["manual"],
 )
 
 oci_image(
     name = "image_",
     base = "@distroless_cc_debian12",
     entrypoint = ["./{}/llm".format(package_name())],
+    tags = ["manual"],
     target_compatible_with = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
     ],
     tars = [":archive"],
-    tags = ["manual"]
 )
 
 platform_transition_filegroup(
@@ -89,17 +126,16 @@ oci_push(
     tags = ["manual"],
 )
 
-
 oci_image(
     name = "image_debug_",
     base = "@debian_12",
     entrypoint = ["./examples/llm/llm"],
+    tags = ["manual"],
     target_compatible_with = [
         "@platforms//os:linux",
         "@platforms//cpu:x86_64",
     ],
     tars = [":archive"],
-    tags = ["manual"],
 )
 
 platform_transition_filegroup(

@@ -1155,10 +1155,23 @@ pub const KvCache = struct {
             };
         }
 
-        pub fn initBuffer(self: GatedDeltaNetCache, io: std.Io, platform: *const zml.Platform) !GatedDeltaNetCache.Buffers {
+        /// A layer executable receives its own state instead of the entire model's.
+        pub fn singleLayer(self: GatedDeltaNetCache) GatedDeltaNetCache {
             return .{
-                .conv_state = try zml.Buffer.uninitialized(io, platform, self.conv_state.shape(), .{}),
-                .recurrent_state = try zml.Buffer.uninitialized(io, platform, self.recurrent_state.shape(), .{}),
+                .conv_state = .fromShape(self.conv_state.shape().setDim(.layer, 1)),
+                .recurrent_state = .fromShape(self.recurrent_state.shape().setDim(.layer, 1)),
+                .layer_index = self.layer_index,
+            };
+        }
+
+        pub fn initBuffer(self: GatedDeltaNetCache, io: std.Io, platform: *const zml.Platform) !GatedDeltaNetCache.Buffers {
+            var conv_state = try zml.Buffer.uninitialized(io, platform, self.conv_state.shape(), .{});
+            errdefer conv_state.deinit();
+            var recurrent_state = try zml.Buffer.uninitialized(io, platform, self.recurrent_state.shape(), .{});
+            errdefer recurrent_state.deinit();
+            return .{
+                .conv_state = conv_state,
+                .recurrent_state = recurrent_state,
                 .layer_index = try zml.Buffer.scalar(io, platform, 0, .u32),
             };
         }
