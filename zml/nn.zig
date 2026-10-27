@@ -50,6 +50,19 @@ pub const Linear = struct {
             }
             return self.forwardScaled(x.convert(.bf16), null, null, out_dtype);
         }
+        // XLA's CPU YNN path rejects vector dots (b/430079105). Keep a
+        // matrix dot until after library selection, then discard the extra row.
+        if (zml.Compiler.current().platform.target == .cpu and
+            x.dtype() == .bf16 and self.weight.dtype() == .bf16 and
+            self.weight.rank() == 2 and x.shape().hasTag(.s) != null and
+            self.tag != Shape.toTag(.s) and x.dim(.s) == 1 and
+            x.count() == @as(usize, @intCast(x.dim(self.tag))))
+        {
+            const matrix = Tensor.concatenate(&.{ x, x }, .s);
+            const projected = matrix.dot(self.weight, self.tag).convert(out_dtype);
+            const y = projected.slice(.s, .{ .start = 0, .end = 1 });
+            return if (self.bias) |bias| y.add(bias.convert(y.dtype()).broad(y.shape())) else y;
+        }
         const y = x.dot(self.weight.convert(x.dtype()), self.tag).convert(out_dtype);
         return if (self.bias) |bias| y.add(bias.convert(y.dtype()).broad(y.shape())) else y;
     }

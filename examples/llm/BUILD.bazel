@@ -1,5 +1,6 @@
 load("@bazel_lib//lib:transitions.bzl", "platform_transition_filegroup")
 load("@bazel_skylib//rules:build_test.bzl", "build_test")
+load("@bazel_skylib//rules:native_binary.bzl", "native_test")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load", "oci_push")
 load("@rules_zig//zig:defs.bzl", "zig_binary")
 load("@tar.bzl//tar:mtree.bzl", "mtree_spec")
@@ -114,4 +115,22 @@ oci_load(
     image = ":image_debug",
     repo_tags = ["zmlai/llm:debug"],
     tags = ["manual"],
+)
+
+zig_binary(
+    name = "two_row_tests",
+    testonly = True,
+    srcs = ["two_row_tests.zig"],
+    main = "two_row_tests.zig",
+    deps = ["//zml"],
+)
+
+native_test(
+    name = "two_row_test",
+    size = "medium",
+    src = ":two_row_tests",
+    target_compatible_with = select({
+        "//platforms:cpu.enabled": [],
+        "//conditions:default": ["@platforms//:incompatible"],
+    }),
 )
